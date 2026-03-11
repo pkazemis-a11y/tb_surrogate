@@ -12,7 +12,7 @@ poetry run python examples/complete_pipeline.py
 **Purpose**: Quick data inspection and contract verification
 
 - Load 7,000 simulations from `data/database.csv`
-- Inspect 10 building features, 12 ground-motion features, 100 responses
+- Inspect 10 building features, 12 ground-motion features, 91 responses
 - Verify data shapes and column names
 - Useful as a sanity check before running training
 
@@ -28,10 +28,12 @@ The complete pipeline demonstrates the **entire workflow** from raw data to opti
 - Load 7,000 simulations and extract inputs/outputs
 - Display data shapes and sample values
 - Verify all required columns are present
+- Standardize the input space and scale the response space for stable learning
+- Establish the preprocessing stage that every later step depends on
 
 ### Step 2: 2-Fold Cross-Validation & Training
 - Train neural network surrogate with **optimal hyperparameters**:
-  - Epochs: 200
+  - Epochs: 100
   - Batch size: 32
   - Learning rate: 2e-5
   - L2 regularization: 1e-4
@@ -39,14 +41,14 @@ The complete pipeline demonstrates the **entire workflow** from raw data to opti
 - Collect per-epoch loss history (training curves)
 - Compute fold-level metrics: MSE, MAE, R²
 - Generate visualizations:
-  - `training_curves.png` – Per-fold train/val loss over 200 epochs
+  - `training_curves.png` – Per-fold train/val loss over 100 epochs
   - `learning_curves.png` – MSE, MAE, R² across folds
 
 ### Step 3: Final Model Training
 - Retrain model on **full dataset** (all 7,000 simulations)
 - Use same hyperparameters as cross-validation
-- Display training progress at key epochs (1, 50, 100, 200)
-- Model ready for deployment
+- Display training progress at key epochs (1, 50, 100)
+- Produce the predictor needed for downstream design search
 
 ### Step 4: Surrogate Validation
 - Generate predictions on 500 holdout samples
@@ -54,12 +56,14 @@ The complete pipeline demonstrates the **entire workflow** from raw data to opti
 - Ensure model generalizes before optimization
 
 ### Step 5: Multi-Objective Optimization (NSGA-II)
-- Use trained surrogate as **fast objective function**
+- Use the trained surrogate as a **fast objective function**
 - Run genetic algorithm with:
-  - Population size: 40 designs
-  - Generations: 50
+  - Population size: 100 designs
+  - Generations: 10
   - Objectives: 8 responses (acceleration, drift, stress, mass, etc.)
 - Extract Pareto-optimal designs (best trade-offs)
+
+This ordering is intentional: if preprocessing has not been fitted, training is invalid; if training has not produced a usable predictor, optimization is invalid.
 
 ### Step 6: Summary & Exports
 - Generate hyperparameter summary visualization
@@ -81,25 +85,24 @@ All outputs stored in `outputs/` subdirectory:
 
 **Runtime**: ~15-30 minutes (varies by hardware; 5-10 min on GPU)
 
-## What Makes This Example "Complete"?
+## What Makes This Example Worth Showing?
 
-Unlike typical "quick-start" examples, this pipeline is:
+This is not just a short demo. It shows the full logic of the workflow:
 
-1. **Production-ready**: Full preprocessing, validation, and error handling
-2. **Educational**: Clear print statements explain each step
-3. **Reproducible**: Fixed random seeds and deterministic splits
-4. **Well-documented**: Every function has docstrings explaining inputs/outputs/methodology
-5. **Visualization-rich**: Training curves, learning curves, and hyperparameter summary plots
-6. **Export-ready**: Results saved as CSV for further analysis
+1. **Preprocessing is explicit** instead of being hidden inside training.
+2. **Validation comes before final fitting** so the predictor is checked before it is used.
+3. **Optimization comes last** because it depends on a working prediction stage.
+4. **Diagnostics are saved** so convergence and generalization can be inspected.
+5. **Outputs are exportable** for further analysis outside the script.
 
 ## Hyperparameter Justification
 
-All hyperparameters (epochs, batch size, learning rate, etc.) were **optimized via trial-and-error** in the original Jupyter notebook. For detailed rationale, see:
+All hyperparameters (epochs, batch size, learning rate, etc.) were selected through repeated comparative tuning. For detailed rationale, see:
 
 **[docs/HYPERPARAMETERS.md](../docs/HYPERPARAMETERS.md)**
 
 Key insights:
-- **Epochs = 200**: Validation loss plateaus; further training risks overfitting
+- **Epochs = 100**: Validation loss plateaus; further training risks overfitting
 - **Batch size = 32**: Tuned for 7,000-sample dataset (tested 16, 32, 64, 128)
 - **Learning rate = 2e-5**: Very low for fine-tuned convergence (tested 1e-5, 5e-5, 1e-4)
 - **Weight decay = 1e-4**: L2 regularization prevents overfitting without underfitting
@@ -109,37 +112,28 @@ Key insights:
 
 ### Modify hyperparameters
 
-Edit `step_2_cross_validation_and_training()`:
+Common tuning directions:
 
-```python
-config = NeuralNetworkConfig(
-    num_epochs=250,           # Increase to 250 epochs
-    batch_size=64,            # Change to larger batch
-    learning_rate=1e-5,       # Lower learning rate
-    l2_weight_decay=5e-4,     # Stronger regularization
-    k_fold_splits=3,          # Change to 3-fold CV
-    device='cuda',            # Use GPU if available
-)
-```
+- increase epochs if validation loss still trends downward
+- reduce learning rate if optimization becomes unstable
+- increase regularization if training error drops much faster than validation error
+- increase fold count if you need a stronger estimate of generalization
 
 ### Modify optimization objectives
 
-Edit `step_5_multi_objective_optimization()`:
+Common tuning directions:
 
-```python
-optimizer = NsGAIIOptimizer(
-    surrogate_trainer=trainer,
-    pop_size=100,             # Larger population
-    n_gen=100,                # More generations
-    seed=123,                 # Different random seed
-)
-```
+- increase the population when you want a richer Pareto front
+- increase generations when the search has not converged
+- reduce the number of objectives when decision-making becomes too diffuse
 
-### Use a different surrogate
+### Use a different predictor
 
-Replace `ModelTrainer` (in `src.models`) with any regressor implementing:
-- `.fit(x_building, x_gm, y)` – train
-- `.predict(x_building, x_gm)` → (n_samples, 100) array
+Any alternative approach still needs to preserve the same pipeline logic:
+- preprocessing first
+- supervised learning second
+- validation before optimization
+- full response prediction during search
 
 ## Related Documentation
 

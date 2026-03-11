@@ -1,55 +1,57 @@
 # Surrogate-based Generative Optimisation of Diagrid Tall Buildings
 
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python 3.8-3.11](https://img.shields.io/badge/Python-3.8--3.11-blue.svg)](https://www.python.org/)
+[![Python 3.8-3.13](https://img.shields.io/badge/Python-3.8--3.13-blue.svg)](https://www.python.org/)
 
-This repository contains the public code sample accompanying the manuscript "Surrogate-based generative optimisation of diagrid tall buildings". It packages the cleaned parts of the original exploratory notebook into a structured codebase: dataset contract, preprocessing, a reference surrogate model, and optimization utilities for early-stage design exploration of tall buildings with outer diagrids.
+This repository presents a clean machine-learning pipeline for surrogate-based design exploration of tall buildings with outer diagrids. The focus is straightforward: import the data, preprocess it carefully, train a predictor, validate it properly, and only then use it for multi-objective optimization.
 
-The repository includes the reference model code, but it intentionally does not ship trained weights or serialized preprocessing artifacts. Users can retrain, modify, or replace the model while keeping the documented 22-input / 100-response contract.
+The repository includes working code for that pipeline, but it intentionally does not ship trained weights or frozen preprocessing artifacts. Anyone using the repo is expected to run those stages for themselves and adapt them to their own design questions.
 
 ## Related Repository
 
-The companion dataset repository is [Tall-buildings-with-outer-diagrids-design-exploration](https://github.com/pkazemis-a11y/Tall-buildings-with-outer-diagrids-design-exploration). It contains the database, dataset-oriented documentation, and supporting reference material used to build the surrogate model in this repository.
+The companion dataset repository is [tb_database](https://github.com/pkazemis-a11y/tb_database). It contains the database, dataset-oriented documentation, and supporting reference material used to build the surrogate model in this repository.
 
 ## What This Repository Provides
 
-1. **Define** the 22-input / 100-response contract used by the surrogate workflow.
-2. **Load** and validate the tall-building dataset through reusable data utilities.
-3. **Train** a clean notebook-derived reference surrogate in memory.
-4. **Optimise** candidate designs with generic NSGA-II utilities once a predictor is supplied.
-5. **Document** the modeling assumptions and response targets used in the manuscript workflow.
+1. **A clear learning contract** built around 22 inputs and 91 response variables.
+2. **A reproducible data pipeline** for loading, checking, and preparing the dataset.
+3. **A full training sequence** with preprocessing, validation, and performance tracking.
+4. **A downstream optimization stage** that depends on a trained predictor rather than bypassing it.
+5. **Documentation that explains the workflow as a pipeline**, not as a collection of disconnected scripts.
 
 ## Repository Structure
 
 ```
-src/
-├── core/             # Configuration, data loading, preprocessing
-├── models/           # Reference surrogate architecture and training utilities
-└── optimization/     # NSGA-II problem setup and solution ranking
-
-examples/             # Demonstration scripts
-docs/                 # Methodology, FAQ, and usage notes
-data/                 # Training data
-tests/                # Smoke tests for contracts
+data/                 # training dataset
+docs/                 # workflow explanation and technical notes
+examples/             # runnable pipeline examples
+src/                  # implementation of the workflow
+tests/                # smoke tests
 ```
 
 ## How It Works
 
-**Training:** The repository includes a clean two-branch surrogate network and an in-memory trainer derived from the original notebook workflow.
+This repository is structured as a strict pipeline:
 
-**Optimisation:** The included NSGA-II utilities search over building design parameters and rank candidate designs once you provide a predictor callable.
+1. **Import data** and verify the expected feature and response columns.
+2. **Preprocess data** by keeping building and ground-motion inputs separate, standardizing the inputs, and scaling the responses for stable optimization during training.
+3. **Train and validate** the surrogate with fold-local preprocessing, monitored loss curves, and holdout checks.
+4. **Re-fit on the full dataset** once the training configuration has been validated.
+5. **Run optimization** only after the surrogate can produce reliable response predictions.
+
+If preprocessing is skipped, training is not meaningful. If training is skipped, optimization is not meaningful. The workflow is intentionally sequential.
 
 **Inputs to model:**
 - 10 building features (geometry, proportions, structural parameters)
 - 12 ground-motion parameters (seismic characteristics)
 
-**Outputs (100 responses):** accelerations, displacements, stresses, torsion, moments, costs, embodied carbon, etc.
+**Outputs (91 responses):** accelerations, displacements, stresses, torsion, geometry-derived quantities, total costs, and embodied carbon.
 
-**Default optimization targets (8):** peak acceleration, maximum displacement, story drift, equivalent stress, torsion, reaction moments, and cost per area.
+**Default optimization targets (8):** peak acceleration, maximum displacement, story drift, equivalent stress, torsion, reaction resultants, and total structural mass.
 
 ## Installation
 
-Requires Python 3.8–3.11. Uses Poetry for dependency management.
+Requires Python 3.8–3.13. Uses Poetry for dependency management.
 
 ```bash
 poetry install
@@ -75,10 +77,10 @@ This repository includes:
 
 - the 10 building-feature inputs
 - the 12 ground-motion inputs
-- the 100-response output contract
-- reusable preprocessing utilities
-- a reference PyTorch surrogate model and trainer
-- generic NSGA-II optimization utilities
+- the 91-response output contract used in the archived notebook workflow
+- a complete preprocessing, training, validation, and optimization workflow
+- loss tracking and visual diagnostics for training quality
+- multi-objective optimization utilities for design exploration
 
 This repository does not include:
 
@@ -94,20 +96,18 @@ Run the clean end-to-end example:
 poetry run python examples/complete_pipeline.py
 ```
 
-The example trains and evaluates the reference surrogate in memory and reports summary metrics without writing model files.
+The example walks through the full sequence of preprocessing, training, validation, and optimization without writing model files.
 
 ## Optimization
 
-The `src.optimization` package remains usable, but it is now documented as a generic optimization layer. To use it, provide a predictor callable that maps candidate designs to the 100-response vector.
+Optimization is treated as the final stage of the workflow, not as a standalone entry point. Candidate designs are evaluated only after the response-prediction stage is in place.
 
-## Implementation Notes
+## Workflow Design Notes
 
-- Configuration is centralized in `src/core/config.py`.
-- Building and ground-motion preprocessing remain separate.
-- The reference trainer uses fold-local preprocessing during cross-validation.
-- The response contract still covers all 100 outputs used in the manuscript workflow.
-- Optimization is exposed as reusable Python classes rather than a bundled inference CLI.
-- Examples stay close to the package API.
+- building and ground-motion inputs stay separate because they describe different physical processes
+- response scaling stays explicit so training remains stable across many output targets
+- cross-validation comes before final fitting so the workflow is not tuned to one lucky split
+- optimization sits downstream of prediction, so it is treated as the last step rather than the starting point
 
 ## Quick Verification
 

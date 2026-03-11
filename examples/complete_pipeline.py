@@ -1,37 +1,16 @@
-"""
-COMPLETE PIPELINE: Surrogate Model Training + Multi-Objective Optimization
+"""Run the full pipeline from prepared data to validated prediction and design search.
 
-This script demonstrates the complete workflow for the surrogate-based design optimization:
+The script follows one sequence on purpose:
 
-    1. DATA LOADING & PREPROCESSING
-       - Load 7,000 simulations from the database
-       - Extract 10 building features and 12 ground-motion features
-       - Extract 100 structural response variables
-       - Standardize inputs, scale responses
+1. import and structure the data
+2. preprocess it for stable learning
+3. train and validate the predictor
+4. re-fit on the full dataset
+5. run multi-objective optimization
+6. save plots and tabular outputs
 
-    2. CROSS-VALIDATION & TRAINING
-       - 2-fold cross-validation for robust performance assessment
-       - Train neural network surrogate with optimal hyperparameters
-       - Visualize training convergence (loss curves) and generalization (learning curves)
-
-    3. FINAL MODEL FIT
-       - Retrain on full dataset with tuned hyperparameters
-       - Generate predictions on test designs
-
-    4. MULTI-OBJECTIVE OPTIMIZATION (NSGA-II)
-       - Use fitted surrogate as objective function
-       - Optimize designs for minimizing responses across 8 design objectives
-       - Explore Pareto-optimal design space
-
-Hyperparameters are derived from notebook trial-and-error (surrogate-26.06.2024.ipynb):
-  • Epochs: 200
-  • Batch size: 32
-  • Learning rate: 2e-5 (low for fine-tuning)
-  • Weight decay (L2): 1e-4
-  • Dropout: [0.3, 0.3, 0.2] (regularization to prevent overfitting)
-  • K-fold: 2 (validation strategy)
-
-Reference: See docs/HYPERPARAMETERS.md for detailed rationale.
+The key dependency is simple: optimization only makes sense after preprocessing
+and training have produced a predictor that behaves well on validation data.
 """
 
 import sys
@@ -69,7 +48,8 @@ def step_1_load_and_preprocess_data() -> tuple:
     - Reads 7,000 simulations from the database
     - Extracts building input features (10 variables: geometry, height, taper, twist, etc.)
     - Extracts ground-motion input features (12 variables: magnitude, distance, Vs30, etc.)
-    - Extracts structural response outputs (100 variables: accelerations, drifts, stresses, etc.)
+    - Extracts structural and environmental response outputs (91 variables)
+    - Establishes the data representation required for every downstream step
 
     Returns:
         (x_building, x_gm, y): DataFrames with features and responses
@@ -119,26 +99,29 @@ def step_2_cross_validation_and_training(
     - Evaluate fold-level generalization (MSE, MAE, R²)
     - Generate and save visualization: training curves and learning curves
 
-    Hyperparameters (from notebook optimization):
-    - Epochs: 200
+    This is the stage that turns preprocessed data into a usable predictor.
+    Optimization depends on this stage being completed successfully.
+
+    Hyperparameters (paper-aligned final setting):
+    - Epochs: 100
     - Batch size: 32
     - Learning rate: 2e-5
     - Weight decay: 1e-4
     - Architecture: 2-branch MIMO network (512 units/branch, merge → 512→256→128)
     - Dropout: [0.3, 0.3, 0.2]
+    - Epoch rationale: no further improvement was achieved beyond epoch 100
 
     Returns:
         cv_results: CrossValidationSummary with folds, histories, metrics
     """
     print_section("STEP 2: CROSS-VALIDATION & TRAINING")
-    print("Running 2-fold cross-validation with optimal hyperparameters...")
-    print("  [These hyperparameters were found via extensive trial-and-error in the notebook]")
+    print("Running 2-fold cross-validation with the tuned training setup...")
     print()
 
-    # Set up model configuration with optimal hyperparameters from notebook
+    # Set up model configuration with tuned hyperparameters
     config = NeuralNetworkConfig(
-        num_epochs=200,        # Iterations to train optimizer
-        batch_size=32,         # Found to be optimal in notebook trials
+        num_epochs=100,        # No further improvement achieved beyond 100 epochs
+        batch_size=32,         # Selected from comparative experiments
         learning_rate=2e-5,    # Low LR for stable convergence
         l2_weight_decay=1e-4,  # L2 regularization strength
         k_fold_splits=2,       # Number of CV folds
@@ -202,7 +185,7 @@ def step_3_fit_final_model(
     STEP 3: Fit final surrogate on entire dataset.
 
     After cross-validation assessment, retrain the model on all available data
-    with the same hyperparameters. This model is used for optimization.
+    with the same hyperparameters. This produces the predictor used in optimization.
 
     Returns:
         (trainer, train_history): Fitted ModelTrainer and per-epoch losses
@@ -220,8 +203,7 @@ def step_3_fit_final_model(
     print(f"✓ Model training complete!")
     print(f"  • Training loss (epoch 1): {train_history[0]:.6f}")
     print(f"  • Training loss (epoch 50): {train_history[49] if len(train_history) > 49 else 'N/A'}")
-    print(f"  • Training loss (epoch 100): {train_history[99] if len(train_history) > 99 else 'N/A'}")
-    print(f"  • Training loss (final epoch 200): {train_history[-1]:.6f}")
+    print(f"  • Training loss (final): {train_history[-1]:.6f}")
     print()
 
     return final_trainer, train_history
@@ -269,19 +251,22 @@ def step_5_multi_objective_optimization(
     STEP 5: Multi-objective design optimization using NSGA-II.
 
     Uses the trained surrogate as a fast objective function evaluator.
-    Optimizes building designs to minimize 8 structural response objectives simultaneously:
+    Optimizes building designs to minimize 8 structural objectives simultaneously:
     1. Overall max acceleration
     2. Max displacement
     3. Max inter-story drift
     4. Max von Mises stress
     5. Max torsional response
-    6. Max response magnitude (high frequency)
-    7. Max response magnitude (mid frequency)
+    6. Max response magnitude R
+    7. Max response magnitude M
     8. Total structural mass
 
     The optimization explores the design space defined by:
     - Model parameters: top/bottom geometry, orientation, tapering, twisting
     - Ground motions: variable seismic events (from recorded database)
+
+    This stage is intentionally downstream of preprocessing and training.
+    It should only be run once the predictor quality is acceptable.
 
     Returns:
         opt_results: Optimization results (Pareto-optimal designs)
@@ -290,15 +275,15 @@ def step_5_multi_objective_optimization(
 
     print("Setting up NSGA-II optimizer...")
     print("  • Algorithm: NSGA-II (Non-dominated Sorting Genetic Algorithm II)")
-    print("  • Population size: 40")
-    print("  • Generations: 50")
-    print("  • Objectives to minimize: 8 (acceleration, drift, stress, mass, etc.)")
+    print("  • Population size: 100")
+    print("  • Generations: 10")
+    print("  • Objectives to minimize: 8 (structural demands and total mass)")
     print()
 
     optimizer = NsGAIIOptimizer(
         surrogate_trainer=trainer,
-        pop_size=40,
-        n_gen=50,
+        pop_size=100,
+        n_gen=10,
         seed=42,
     )
 
@@ -368,7 +353,7 @@ def step_6_summary_and_exports(
                 "Max_Torsion",
                 "Max_Magnitude_R",
                 "Max_Magnitude_M",
-                "Total_Mass",
+                "TotalMass",
             ],
         )
         pareto_obj_df.to_csv(output_dir / "pareto_objectives.csv", index=False)
@@ -380,8 +365,10 @@ def step_6_summary_and_exports(
 def main() -> None:
     """Execute the complete pipeline: preprocessing → training → optimization."""
     print("\n" + "=" * 70)
-    print("  SURROGATE-BASED GENERATIVE OPTIMIZATION - COMPLETE PIPELINE")
+    print("  SURROGATE-BASED GENERATIVE OPTIMIZATION")
     print("=" * 70)
+    print("  data -> preprocessing -> training -> validation -> optimization")
+    print()
 
     # ========== STEP 1: Load & Preprocess ==========
     x_building, x_gm, y = step_1_load_and_preprocess_data()

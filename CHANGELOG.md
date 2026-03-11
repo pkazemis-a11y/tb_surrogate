@@ -9,7 +9,7 @@ All notable changes to this project are documented in this file.
 - aligned the public documentation with the current package interface
 - standardized setup instructions on Poetry
 - updated CLI examples to use separate building and ground-motion preprocessors
-- documented the 100-response training interface and the smaller default optimization set
+- documented the 91-response training interface and the smaller default optimization set
 
 ### Fixed
 

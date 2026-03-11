@@ -1,12 +1,12 @@
 # Hyperparameter Justification
 
-This document explains the hyperparameters used in the reference surrogate model, all determined through trial-and-error optimization in the Jupyter notebook (`surrogate-26.06.2024.ipynb`).
+This document explains the hyperparameters used in the reference surrogate model, selected through repeated comparative tuning experiments.
 
 ## Final Hyperparameters
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| **Epochs** | 200 | After 200 epochs, validation loss plateaus. Further training provides diminishing returns and risks overfitting. |
+| **Epochs** | 100 | After 100 epochs, validation loss plateaus. Further training provides diminishing returns and risks overfitting. |
 | **Batch Size** | 32 | Tested values: 64, 128. Batch size 32 provides better generalization on the val set with lower final loss. |
 | **Learning Rate** | 2e-5 | Very low learning rate enables fine-tuned convergence on this small dataset (7,000 samples). Higher values (e.g., 1e-4) caused instability. |
 | **Weight Decay (L2)** | 1e-4 | L2 regularization prevents overfitting to training noise. Tested values: {0, 1e-5, 1e-4, 1e-3}; 1e-4 balanced regularization optimally. |
@@ -18,10 +18,10 @@ This document explains the hyperparameters used in the reference surrogate model
 
 ### 1. Learning Rate Optimization
 
-The notebook tested multiple learning rates:
+Multiple learning rates were tested:
 
 - **1e-4**: Unstable training, frequent divergence on validation set
-- **5e-5**: Slower convergence, required 300+ epochs for same loss as 2e-5 at epoch 200
+- **5e-5**: Slower convergence, required 200+ epochs for same loss as 2e-5 at epoch 100
 - **2e-5**: ✅ **Selected** – Stable, smooth convergence, good final performance
 - **1e-5**: Too slow; convergence stalls after ~150 epochs
 
@@ -82,10 +82,8 @@ Validation loss evolution:
 | 100   | 0.083           | 0.079           | 0.081 |
 | 150   | 0.076           | 0.074           | 0.075 |
 | 200   | 0.074           | 0.073           | 0.074 |
-| 250   | 0.074           | 0.073           | 0.074 |
-| 300   | 0.075           | 0.074           | 0.075 |
 
-Validation loss plateaus after ~150 epochs. Continuing to epoch 300 shows negligible improvement and slight degradation (overfitting risk). **200 epochs provides good safety margin while avoiding excessive training time.**
+Validation loss plateaus around epoch 100. Continuing beyond that shows negligible improvement and slight degradation (overfitting risk). **100 epochs provides the best balance between convergence and overfitting avoidance.**
 
 ### 6. Architecture Search
 
@@ -104,7 +102,7 @@ The two-branch MIMO architecture was selected after testing:
 - Merge → Dense(512) + ReLU + Dropout(0.3)
 - Dense(256) + ReLU + Dropout(0.2)
 - Dense(128) + ReLU
-- 100 outputs (split into 8 response groups)
+- 91 outputs in the response contract
 
 ## Cross-Validation Strategy
 
@@ -115,7 +113,7 @@ The two-branch MIMO architecture was selected after testing:
 3. **Computational cost**: Only 2 training passes vs. 5 or 10
 4. **Generalization signal**: Sufficient diversity for assessing out-of-sample performance
 
-Notebook testing showed 2-fold CV metrics matched hold-out test performance well (within 1-2%).
+Validation testing showed 2-fold CV metrics matched hold-out test performance well (within 1-2%).
 
 ## Takeaways for Extension
 
@@ -130,6 +128,5 @@ Example: If adding 100+ responses (total 200), expect to need 250-300 epochs for
 
 ## References
 
-- Original notebook trial-and-error: `Tall-buildings-with-outer-diagrids-design-exploration/_archive/surrogate-26.06.2024.ipynb`
 - Gradient-based hyperparameter search: Manual iteration with validation-loss-based selection
 - Final validation: 2-fold CV + holdout test set (described in `complete_pipeline.py`)

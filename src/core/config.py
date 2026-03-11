@@ -1,6 +1,6 @@
 """Configuration and constants for the diagrid surrogate code sample.
 
-Centralizes feature definitions, the 100-response target contract, reference
+Centralizes feature definitions, the 91-response target contract, reference
 surrogate-model hyperparameters, and reusable optimization defaults.
 """
 
@@ -42,15 +42,14 @@ GROUND_MOTION_FEATURES = [
     ' Initial-search Scale Factor',
 ]
 
-# All response variables the model predicts (100 total)
+# All response variables the model predicts (91 total).
+#
+# This list follows the notebook-defined surrogate target contract:
+# - 70 structural responses
+# - 7 geometry-dependent building responses
+# - 2 cost responses
+# - 12 embodied-carbon responses
 ALL_RESPONSE_COLUMNS = [
-    " Magnitude",
-    " Mechanism",
-    " Rjb (km)",
-    " Rrup (km)",
-    " Vs30 (m/sec)",
-    " Lowest Useable Frequency (Hz)",
-    " Initial-search Scale Factor",
     "Overall_Max_Acc",
     "Acc_X",
     "Acc_Y",
@@ -121,17 +120,15 @@ ALL_RESPONSE_COLUMNS = [
     "Total_Diagrid_M_Contrib_Value",
     "Total_Core_M_Contrib_Value",
     "Total_Max_Time_M",
-    "Cost of structure",
-    "Cost of floor",
-    "Cost of Land",
+    "TotalGrossArea",
+    "AspectRatio",
+    "TotalFacadeArea",
+    "DiagridAngleBottom",
+    "DiagridAngleTop",
+    "DiagridAngleAvg",
+    "TotalMass",
     "Total costs",
     "Total costs/TGA",
-    "selleble price",
-    "EC Steel1",
-    "EC Steel2",
-    "EC Steel3",
-    "EC floor1",
-    "EC floor2",
     "EC total steel1, floor1",
     "EC total steel2, floor1",
     "EC total steel3, floor1",
@@ -146,16 +143,19 @@ ALL_RESPONSE_COLUMNS = [
     "EC GIA (Steel3, floor 2)",
 ]
 
-# Key responses selected for design optimization based on structural engineering importance
+# Default optimization objectives.
+#
+# The paper discusses broader candidate objectives including cost and carbon,
+# but the reference implementation optimized these eight responses.
 PRIMARY_OPTIMIZATION_TARGETS = [
     'Overall_Max_Acc',          # Peak acceleration
     'Max_Displacement',          # Maximum lateral displacement
     'Overall_Max_Drift',         # Story drift ratio
     'Total_Max_Von_Mises_tot',   # Stress magnitude
     'Overall_Max_Torsion',       # Torsional response
-    'Total_Max_Magnitude_R',     # Reaction moment magnitude
+    'Total_Max_Magnitude_R',     # Reaction magnitude
     'Total_Max_Magnitude_M',     # Moment magnitude
-    'Total costs/TGA',           # Cost per floor area
+    'TotalMass',                 # Total structural mass
 ]
 
 # Response grouping for neural network output layers (one output per response)
@@ -186,12 +186,12 @@ class NeuralNetworkConfig:
     dropout_rate_1: float = 0.3
     dropout_rate_2: float = 0.3
     dropout_rate_3: float = 0.2
-    l2_weight_decay: float = 1e-5
+    l2_weight_decay: float = 1e-4
     
     # Training parameters
     learning_rate: float = 2e-5
     batch_size: int = 32
-    num_epochs: int = 200
+    num_epochs: int = 100
     k_fold_splits: int = 2
     test_size: float = 0.2
     random_state: int = 42
@@ -216,6 +216,7 @@ class NSGAIIConfig:
     # Population parameters
     population_size: int = 100  # Size of population per generation
     num_generations: int = 10   # Number of generations to evolve
+    random_seed: int = 42
     
     # Crossover and mutation
     crossover_prob: float = 0.9   # Probability of crossover

@@ -1,8 +1,8 @@
 """Clean surrogate-modeling utilities for diagrid tall buildings.
 
 The repository exposes the dataset contract, a reference surrogate-model
-implementation, and optimization utilities derived from the exploratory
-research notebook.
+implementation, and optimization utilities for the documented
+research workflow.
 """
 
 __version__ = "0.1.0"

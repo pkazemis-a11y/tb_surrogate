@@ -16,7 +16,7 @@ from pymoo.operators.mutation.pm import PM
 from pymoo.operators.sampling.rnd import FloatRandomSampling
 from pymoo.termination import get_termination
 
-from ..core.config import NSGAIIConfig
+from ..core.config import NSGAIIConfig, ALL_RESPONSE_COLUMNS
 
 
 logger = logging.getLogger(__name__)
@@ -156,6 +156,7 @@ class DesignOptimizer:
                 "n_gen",
                 self.config.num_generations
             ),
+            seed=self.config.random_seed,
             verbose=True,  # Show progress
         )
         
@@ -257,3 +258,80 @@ class DesignOptimizer:
         """
         solutions_df.to_csv(output_path, index=False)
         logger.info(f"Optimized solutions exported to {output_path}")
+
+
+class NSGAIIOptimizerWrapper:
+    """
+    Pipeline-compatible wrapper for NSGA-II multi-objective optimization.
+    
+    Provides a simpler interface for the example pipeline that accepts
+    a trainer (surrogate model) and runs optimization directly.
+    """
+    
+    def __init__(
+        self,
+        surrogate_trainer,
+        pop_size: int = 100,
+        n_gen: int = 10,
+        seed: int = 42,
+    ):
+        """Initialize wrapper with pipeline-style parameters.
+        
+        Args:
+            surrogate_trainer: ModelTrainer instance with trained model
+            pop_size: Population size for NSGA-II
+            n_gen: Number of generations
+            seed: Random seed
+        """
+        self.surrogate_trainer = surrogate_trainer
+        self.pop_size = pop_size
+        self.n_gen = n_gen
+        self.seed = seed
+        
+    def optimize(self) -> Dict:
+        """
+        Run optimization and return results.
+        
+        Returns:
+            Dictionary with:
+            - 'pareto_designs': Array of optimal design variables
+            - 'pareto_objectives': Array of objective function values
+        """
+        # Build NSGA-II config from wrapper parameters
+        config = NSGAIIConfig(
+            population_size=self.pop_size,
+            num_generations=self.n_gen,
+            random_seed=self.seed,
+        )
+        if self.surrogate_trainer.model is None:
+            raise ValueError("Surrogate trainer must be fit before optimization.")
+        if self.surrogate_trainer.reference_ground_motion is None:
+            raise ValueError("Ground-motion reference is unavailable. Fit the surrogate before optimization.")
+        if self.surrogate_trainer.building_feature_bounds is None:
+            raise ValueError("Building feature bounds are unavailable. Fit the surrogate before optimization.")
+
+        objective_indices = [ALL_RESPONSE_COLUMNS.index(name) for name in config.objectives]
+        lower_bounds, upper_bounds = self.surrogate_trainer.building_feature_bounds
+        building_template = np.vstack([lower_bounds, upper_bounds])
+        gm_reference = np.asarray(self.surrogate_trainer.reference_ground_motion, dtype=object)
+
+        def predictor(candidate_buildings: np.ndarray) -> np.ndarray:
+            gm_batch = np.repeat(gm_reference[None, :], candidate_buildings.shape[0], axis=0)
+            return self.surrogate_trainer.predict(candidate_buildings, gm_batch)
+
+        problem = BuildingDesignProblem(
+            predictor=predictor,
+            building_features=building_template,
+            objectives=config.objectives,
+            objective_indices=objective_indices,
+        )
+
+        optimizer = DesignOptimizer(config)
+        logger.info("Running NSGA-II optimization via wrapper...")
+        pareto_designs, pareto_objectives = optimizer.optimize(problem)
+
+        return {
+            'pareto_designs': pareto_designs,
+            'pareto_objectives': pareto_objectives,
+            'objective_names': config.objectives,
+        }

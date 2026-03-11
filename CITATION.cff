@@ -34,7 +34,7 @@ keywords:
   - "multi-objective optimisation"
   - "neural networks"
   - "structural design"
-repository-code: "https://github.com/pkazemis-a11y/surrogate-based-generative-optimisation-of-diagrid-tall-buildings"
+repository-code: "https://github.com/pkazemis-a11y/tb_surrogate"
 preferred-citation:
   type: article
   title: "Surrogate-based generative optimisation of diagrid tall buildings"

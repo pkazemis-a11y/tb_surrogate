@@ -77,13 +77,13 @@ class DataLoader:
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """Extract building features, ground motion features, and response variables.
         
-        By default, extracts all 100 response columns. Can be overridden to extract
+        By default, extracts all 91 response columns. Can be overridden to extract
         a subset (e.g., for optimization-focused training).
         
         Args:
             building_features: Building design feature column names.
             ground_motion_features: Seismic parameter column names.
-            responses: Response variable column names (default: all 100).
+            responses: Response variable column names (default: all 91).
             
         Returns:
             Tuple of (X_building, X_gm, y)

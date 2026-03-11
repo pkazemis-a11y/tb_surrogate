@@ -1,6 +1,8 @@
 # Getting Started with Surrogate-Based Design Optimization
 
-This repository provides a **complete, end-to-end pipeline** for surrogate-model training and multi-objective optimization of tall buildings with outer diagrids.
+This repository is organized as one pipeline: **data import → preprocessing → training → validation → optimization**. Each stage depends on the previous one being done correctly.
+
+That ordering matters. If the data has not been prepared, training is unreliable. If the predictor has not been trained and checked, optimization is just searching on top of noise.
 
 ## Overview
 
@@ -13,11 +15,11 @@ The workflow consists of **6 main steps**:
 5. **Multi-Objective Optimization** – Use NSGA-II to find Pareto-optimal designs
 6. **Visualization & Export** – Plot training metrics and save optimal designs
 
-All hyperparameters are pre-tuned (based on extensive notebook trial-and-error) for best performance.
+All hyperparameters are pre-tuned based on repeated comparative experiments for best performance.
 
 ## Prerequisites
 
-- **Python**: 3.8 to 3.11
+- **Python**: 3.8 to 3.13
 - **Poetry**: For dependency management
 
 ## Quick Start (10 minutes)
@@ -31,7 +33,7 @@ poetry install
 ### 2. Verify the environment is ready
 
 ```bash
-poetry run python -c "from src.core import DataLoader; print('✓ Ready to go!')"
+poetry run python examples/load_data.py
 ```
 
 ### 3. Run the complete pipeline
@@ -53,20 +55,26 @@ Expected runtime: **~15-30 minutes** (depending on GPU availability)
 The script loads the database and extracts:
 - **Building features** (10): Top/bottom geometry, height, taper, twist, etc.
 - **Ground-motion features** (12): Magnitude, distance, Vs30, intensity, etc.
-- **Structural responses** (100): Accelerations, drifts, stresses, displacements, etc.
+- **Structural responses** (91): Accelerations, drifts, stresses, displacements, etc.
 
 **What happens**:
 - Raw CSV is validated for required columns
 - Inputs are separated by modality (building vs. seismic)
+- Input features are standardized for stable numerical behavior during training
+- Responses are scaled so multi-output learning remains well-conditioned
 - Responses are extracted and prepared for training
+
+**Why this comes first**:
+- Without preprocessing, the training stage mixes variables with very different ranges and semantics.
+- Without a fitted preprocessing stage, optimization would send invalid inputs into the predictor.
 
 ### Step 2: 2-Fold Cross-Validation & Training
 
-Trains the neural network surrogate using **optimal hyperparameters** from notebook optimization:
+Trains the neural network surrogate using **pre-tuned hyperparameters**:
 
 | Hyperparameter | Value | Why? |
 |---|---|---|
-| Epochs | 200 | After 200, validation loss plateaus |
+| Epochs | 100 | After 100, validation loss plateaus |
 | Batch size | 32 | Tuned for this dataset size (7,000 samples) |
 | Learning rate | 2e-5 | Low for fine-tuned, stable convergence |
 | Weight decay | 1e-4 | L2 regularization to prevent overfitting |
@@ -76,13 +84,17 @@ Trains the neural network surrogate using **optimal hyperparameters** from noteb
 **What happens**:
 - Data is split into 2 folds
 - For each fold:
-  - Separate preprocessors fit on training fold
-  - 200 epochs of PyTorch training with Adam optimizer
-  - Per-epoch loss tracked (train and validation)
-  - Fold-level metrics computed (MSE, MAE, R²)
-- Visualization saved: `training_curves.png`, `learning_curves.png`
+  - preprocessing is fitted on the training partition only
+  - 100 epochs of training are run with Adam
+  - per-epoch loss is tracked for both training and validation
+  - fold-level metrics are computed (MSE, MAE, R²)
+- Visualizations are saved: `training_curves.png`, `learning_curves.png`
 
 **Output**: Per-fold MSE, MAE, R² scores
+
+**Why this comes before optimization**:
+- Optimization needs a predictor that can evaluate many candidate designs cheaply.
+- That predictor only exists after training has converged and validation shows acceptable error.
 
 ### Step 3: Final Model Training
 
@@ -90,11 +102,13 @@ After validation, retrain the model on **all 7,000 simulations** with the same h
 
 **What happens**:
 - Single preprocessor fit on full dataset
-- 200-epoch training run
+- 100-epoch training run
 - Per-epoch training loss tracked and displayed
 - Model ready for predictions
 
-**Output**: Trained in-memory model (no weights saved, following notebook methodology)
+**Output**: Trained in-memory model (no weights saved)
+
+This step turns the validated workflow into a usable prediction stage for downstream design search.
 
 ### Step 4: Surrogate Validation
 
@@ -112,8 +126,8 @@ Test the trained surrogate on a holdout subset (500 random samples).
 Use the trained surrogate as a **fast objective function** to optimize building designs.
 
 **Algorithm**: NSGA-II (Non-dominated Sorting Genetic Algorithm II)
-- Population size: 40 designs
-- Generations: 50
+- Population size: 100 designs
+- Generations: 10
 - Objectives: 8 structural/economic responses
 
 **What happens**:
@@ -123,6 +137,8 @@ Use the trained surrogate as a **fast objective function** to optimize building 
 - Results stored as "pareto front"
 
 **Output**: Pareto-optimal designs and their predicted responses
+
+This stage is downstream by design: if the predictor is not trained and validated first, the optimization results have no practical meaning.
 
 ### Step 6: Summary & Exports
 
@@ -138,9 +154,9 @@ Generate final visualizations and export results.
 - `pareto_objectives.csv` – Predicted responses for each solution
 - `hyperparameter_summary.png` – Training config and final metrics
 
-## Understanding the Architecture
+## Core Design Choices
 
-### Surrogate Model: Two-Branch MIMO Network
+### Input and Output Handling
 
 ```
 Building Features (10)      Ground-Motion Features (12)
@@ -162,12 +178,12 @@ Building Features (10)      Ground-Motion Features (12)
                   Dense(128)
                   ReLU
                       |
-            100 Response Outputs
+            91 Response Outputs
             (8 groups for different
              structural categories)
 ```
 
-**Why two branches?**
+**Why separate the inputs?**
 - Separate "encoders" for building and ground-motion modalities
 - Each learns domain-specific transformations
 - Merged representation combines complementary information
@@ -197,45 +213,37 @@ Key insights:
 - **Batch size 32** beat 16, 64, 128 (better val loss, smoother curves)
 - **Weight decay 1e-4** balanced regularization (reduced overfitting gap without underfitting)
 - **Dropout [0.3, 0.3, 0.2]** leverages "early features are more general" principle
-- **200 epochs** provides best validation loss; further training shows overfitting
+- **100 epochs** provides best validation loss; further training shows overfitting
 
-These were found via trial-and-error in `surrogate-26.06.2024.ipynb` over many iterations.
+These values were selected through repeated comparative tuning over many iterations.
 
 ## Customization & Extension
 
-### Modify Hyperparameters
+### Adjust training behavior
 
-Edit `examples/complete_pipeline.py`, function `step_2_cross_validation_and_training()`:
+Typical tuning directions:
 
-```python
-config = NeuralNetworkConfig(
-    num_epochs=200,           # Change to 250 for more epochs
-    batch_size=32,            # Change to 64 for larger batches
-    learning_rate=2e-5,       # Change learning rate
-    l2_weight_decay=1e-4,     # Adjust regularization
-    k_fold_splits=2,          # Change CV folds
-    device='cpu',             # Use 'cuda' for GPU
-)
-```
+- increase epochs if validation loss is still falling steadily
+- increase batch size only if runtime or memory is the constraint
+- lower learning rate when optimization is unstable
+- increase regularization when training error drops much faster than validation error
+- change fold count if you need a stronger estimate of generalization
 
-### Change Optimization Objectives
+### Adjust optimization behavior
 
-In `examples/complete_pipeline.py`, function `step_5_multi_objective_optimization()`:
+Typical tuning directions:
 
-```python
-optimizer = NsGAIIOptimizer(
-    surrogate_trainer=trainer,
-    pop_size=40,              # Change population size
-    n_gen=50,                 # Change generations
-    seed=42,                  # Change random seed
-)
-```
+- increase population size when you want a broader Pareto front
+- increase number of generations when convergence is still improving
+- narrow the objective set when you want more interpretable trade-offs
+- tighten design bounds when the search space is too large for the available data coverage
 
-### Use a Different Surrogate Model
+### Use a Different Predictor
 
-The pipeline is agnostic to the surrogate implementation. Replace `ModelTrainer` in `examples/complete_pipeline.py` with any regressor that has:
-- `.fit(x_building, x_gm, y)` → train
-- `.predict(x_building, x_gm)` → (n_samples, 100) predictions
+The pipeline is agnostic to the predictor implementation as long as it can:
+- learn from preprocessed building inputs, ground-motion inputs, and response targets
+- return one full response vector per candidate design
+- support repeated evaluation during optimization
 
 ## Common Commands
 
@@ -266,23 +274,13 @@ poetry run python -c "import torch; print('GPU available:', torch.cuda.is_availa
 ## Folder Structure
 
 ```
-surrogate-based-generative-optimisation-of-diagrid-tall-buildings/
-├── data/
-│   └── database.csv                    # 7,000 simulations
-├── src/
-│   ├── core/                           # Data loading, preprocessing
-│   ├── models/                         # Neural network, trainer
-│   ├── optimization/                   # NSGA-II optimizer
-│   └── visualization.py                # Training curve plots
-├── examples/
-│   ├── complete_pipeline.py            # 6-step workflow (START HERE)
-│   └── load_data.py                    # Simple data inspection
-├── docs/
-│   ├── HYPERPARAMETERS.md              # Why these values?
-│   └── METHODOLOGY.md                  # Technical background
-└── outputs/
-    ├── visualizations/                 # Training curves, learning curves
-    └── optimization/                   # Pareto fronts, designs
+tb_surrogate/
+├── data/                              # training dataset
+├── docs/                              # workflow notes and rationale
+├── examples/                          # runnable examples
+├── src/                               # implementation of the pipeline
+├── tests/                             # smoke tests
+└── outputs/                           # generated plots and optimization results
 ```
 
 ## Troubleshooting
@@ -297,13 +295,13 @@ poetry run python examples/complete_pipeline.py
 
 ### CUDA out of memory
 
-Edit `examples/complete_pipeline.py` and change `device='cuda'` to `device='cpu'`.
+Run on CPU instead of GPU or reduce batch size.
 
 ### Data file not found
 
 Ensure you run the script from the repository root:
 ```bash
-cd surrogate-based-generative-optimisation-of-diagrid-tall-buildings
+cd tb_surrogate
 poetry run python examples/complete_pipeline.py
 ```
 
@@ -314,11 +312,10 @@ poetry run python examples/complete_pipeline.py
 
 ## Next Steps
 
-1. **Understand the architecture**: Review [src/models/network.py](src/models/network.py) for the two-branch MIMO design
+1. **Understand the workflow**: Read this guide once from start to finish as a pipeline, not as isolated steps
 2. **Learn hyperparameter choices**: Read [docs/HYPERPARAMETERS.md](docs/HYPERPARAMETERS.md)
-3. **Modify objectives**: Edit the 8 optimization targets in [src/optimization/nsga2.py](src/optimization/nsga2.py)
-4. **Swap the surrogate**: Replace `ModelTrainer` with your own regressor
-5. **Inspect the notebook**: Original exploratory work is in `Tall-buildings-with-outer-diagrids-design-exploration/_archive/surrogate-26.06.2024.ipynb`
+3. **Review design trade-offs**: Inspect the optimization outputs and Pareto front behavior
+4. **Adapt the workflow**: Tune preprocessing, training, and optimization together rather than changing only one stage
 
 ## Questions?
 

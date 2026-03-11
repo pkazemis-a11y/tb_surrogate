@@ -54,7 +54,7 @@ def plot_training_curves(
 
     ax.set_xlabel("Epoch", fontsize=11)
     ax.set_ylabel("MSE Loss", fontsize=11)
-    ax.set_title("Per-Fold Training & Validation Loss (200 epochs, lr=2e-5)", fontsize=12)
+    ax.set_title("Per-Fold Training & Validation Loss (100 epochs, lr=2e-5)", fontsize=12)
     ax.legend(fontsize=9, loc="upper right")
     ax.grid(True, alpha=0.3)
 
@@ -272,7 +272,7 @@ def plot_hyperparameter_summary(
 
     # Hyperparameters as text
     ax1.axis("off")
-    hp_text = "Hyperparameters (from notebook trial-and-error):\n\n"
+    hp_text = "Hyperparameters (selected after comparative tuning):\n\n"
     for key, val in hyperparams.items():
         if isinstance(val, float) and val < 0.001:
             hp_text += f"  • {key}: {val:.2e}\n"

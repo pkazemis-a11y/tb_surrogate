@@ -44,7 +44,7 @@ def test_reference_model_output_matches_response_count() -> None:
 
 
 def test_data_loader_extracts_all_responses() -> None:
-    """Verify DataLoader extracts all 100 responses by default."""
+    """Verify DataLoader extracts all 91 responses by default."""
     loader = DataLoader(str(Path('data') / 'database.csv'))
 
     data = loader.load()
@@ -56,4 +56,4 @@ def test_data_loader_extracts_all_responses() -> None:
     assert list(y.columns) == ALL_RESPONSE_COLUMNS
     assert x_building.shape[1] == 10
     assert x_gm.shape[1] == 12
-    assert y.shape[1] == 100
+    assert y.shape[1] == 91
