@@ -33,7 +33,7 @@ While the model predicts all 100 responses, optimization uses a subset of 8 key 
 - `Total_Max_Magnitude_M` - Moment magnitude
 - `Total costs/TGA` - Cost per gross floor area
 
-Users can specify different objectives via the CLI `--objectives` flag.
+Users can specify different objectives in their own optimization wiring.
 
 ## Why the Contract Is Narrower Than the Raw CSV
 
@@ -51,4 +51,4 @@ Optimization then works from that full prediction space but defaults to a smalle
 2. The code extracts building features, ground-motion features, and all response variables.
 3. Building and ground-motion features are preprocessed separately.
 4. Targets are scaled independently.
-5. The same persisted artifacts are reused at optimization time.
+5. A predictor callable can then be wrapped for optimization over the same response contract.

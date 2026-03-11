@@ -3,9 +3,9 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.8-3.11](https://img.shields.io/badge/Python-3.8--3.11-blue.svg)](https://www.python.org/)
 
-This repository contains the codebase accompanying the manuscript "Surrogate-based generative optimisation of diagrid tall buildings". It implements a multi-input, multi-output feed-forward neural network surrogate and a multi-objective optimisation workflow for early-stage design exploration of tall buildings with outer diagrids.
+This repository contains the public code sample accompanying the manuscript "Surrogate-based generative optimisation of diagrid tall buildings". It packages the cleaned parts of the original exploratory notebook into a structured codebase: dataset contract, preprocessing, a reference surrogate model, and optimization utilities for early-stage design exploration of tall buildings with outer diagrids.
 
-The package trains on the generated simulation dataset and uses the fitted surrogate to evaluate candidate designs without repeatedly running the full structural analysis workflow.
+The repository includes the reference model code, but it intentionally does not ship trained weights or serialized preprocessing artifacts. Users can retrain, modify, or replace the model while keeping the documented 22-input / 100-response contract.
 
 ## Related Repository
 
@@ -13,18 +13,18 @@ The companion dataset repository is [Tall-buildings-with-outer-diagrids-design-e
 
 ## What This Repository Provides
 
-1. **Train** a MIMO feed-forward neural network on generated tall-building response data.
-2. **Predict** structural, economic, and environmental response variables from building and ground-motion inputs.
-3. **Optimise** candidate designs with NSGA-II using a configurable objective set.
-4. **Persist** preprocessing and model artifacts for reproducible inference.
+1. **Define** the 22-input / 100-response contract used by the surrogate workflow.
+2. **Load** and validate the tall-building dataset through reusable data utilities.
+3. **Train** a clean notebook-derived reference surrogate in memory.
+4. **Optimise** candidate designs with generic NSGA-II utilities once a predictor is supplied.
+5. **Document** the modeling assumptions and response targets used in the manuscript workflow.
 
 ## Repository Structure
 
 ```
 src/
-├── cli/              # train-model and optimize-designs commands
 ├── core/             # Configuration, data loading, preprocessing
-├── models/           # Neural network architecture and training
+├── models/           # Reference surrogate architecture and training utilities
 └── optimization/     # NSGA-II problem setup and solution ranking
 
 examples/             # Demonstration scripts
@@ -35,9 +35,9 @@ tests/                # Smoke tests for contracts
 
 ## How It Works
 
-**Training:** K-fold cross-validation with fold-local preprocessing prevents data leakage while evaluating model stability. Once validated, the model is trained on all data and saved to `models/`.
+**Training:** The repository includes a clean two-branch surrogate network and an in-memory trainer derived from the original notebook workflow.
 
-**Optimisation:** NSGA-II searches over building design parameters while holding the selected ground-motion input fixed. Candidate designs are evaluated with the trained surrogate and ranked before export to CSV.
+**Optimisation:** The included NSGA-II utilities search over building design parameters and rank candidate designs once you provide a predictor callable.
 
 **Inputs to model:**
 - 10 building features (geometry, proportions, structural parameters)
@@ -69,63 +69,44 @@ poetry shell
 
 More setup detail is in [SETUP.md](SETUP.md).
 
-## Training
+## Public Scope
 
-Use the installable CLI:
+This repository includes:
+
+- the 10 building-feature inputs
+- the 12 ground-motion inputs
+- the 100-response output contract
+- reusable preprocessing utilities
+- a reference PyTorch surrogate model and trainer
+- generic NSGA-II optimization utilities
+
+This repository does not include:
+
+- trained model weights
+- serialized preprocessing artifacts
+- installable training or inference CLIs
+
+## Training Example
+
+Run the clean end-to-end example:
 
 ```bash
-poetry run train-model \
-    --data-path data/database.csv \
-    --epochs 200 \
-    --batch-size 32 \
-    --learning-rate 2e-5 \
-    --output-dir models/
+poetry run python examples/complete_pipeline.py
 ```
 
-The training pipeline:
-
-- loads the CSV once through `DataLoader`
-- fits building and ground-motion preprocessors separately
-- performs fold-local preprocessing during cross-validation to avoid leakage
-- resets model weights between folds
-- retrains a final model on the full dataset after validation
-
-Artifacts written to `models/`:
-
-- `mimo_fnn_model.pth`
-- `building_feature_preprocessor.pkl`
-- `gm_feature_preprocessor.pkl`
-- `response_scaler.pkl`
+The example trains and evaluates the reference surrogate in memory and reports summary metrics without writing model files.
 
 ## Optimization
 
-Use the trained artifacts to run NSGA-II over the observed building-design space:
-
-```bash
-poetry run optimize-designs \
-    --model models/mimo_fnn_model.pth \
-    --building-prep models/building_feature_preprocessor.pkl \
-    --gm-prep models/gm_feature_preprocessor.pkl \
-    --response-scaler models/response_scaler.pkl \
-    --data-path data/database.csv \
-    --population 100 \
-    --generations 10 \
-    --objectives Overall_Max_Acc Max_Displacement "Total costs/TGA" \
-    --gm-strategy mean \
-    --output results/optimized_designs.csv
-```
-
-`--gm-strategy` controls how ground-motion inputs are provided during optimization:
-
-- `mean`: use the column-wise mean ground-motion profile from the dataset
-- `row`: reuse one observed ground-motion row via `--gm-row-index`
+The `src.optimization` package remains usable, but it is now documented as a generic optimization layer. To use it, provide a predictor callable that maps candidate designs to the 100-response vector.
 
 ## Implementation Notes
 
 - Configuration is centralized in `src/core/config.py`.
-- Training and optimization share the same persisted preprocessing artifacts.
-- Cross-validation fits preprocessors inside each fold instead of on the full dataset.
-- Optimization uses the fitted preprocessing path rather than a separate inference shortcut.
+- Building and ground-motion preprocessing remain separate.
+- The reference trainer uses fold-local preprocessing during cross-validation.
+- The response contract still covers all 100 outputs used in the manuscript workflow.
+- Optimization is exposed as reusable Python classes rather than a bundled inference CLI.
 - Examples stay close to the package API.
 
 ## Quick Verification
@@ -133,6 +114,7 @@ poetry run optimize-designs \
 ```bash
 poetry run pytest
 poetry run python examples/load_data.py
+poetry run python examples/complete_pipeline.py
 ```
 
 ## Documentation Map

@@ -58,5 +58,6 @@ Thumbs.db
 # Generated outputs
 logs/
 models/
+artifacts/
 results/
 htmlcov/

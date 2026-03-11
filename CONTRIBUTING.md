@@ -23,16 +23,16 @@ poetry run pytest
 
 ## Contribution priorities
 
-- fix correctness bugs in training or optimization
-- improve tests around data loading, persistence, and CLI behavior
-- extend the target set only if training, persistence, docs, and optimization are all updated together
+- fix correctness bugs in data loading, surrogate training, or optimization utilities
+- improve tests around data loading, training, and public examples
+- extend the target set only if preprocessing, training, docs, tests, and optimization are all updated together
 - keep public documentation aligned with the actual code contract
 
 ## Coding expectations
 
 - use type hints on public functions
 - prefer small, composable modules
-- avoid parallel inference or preprocessing paths that bypass persisted artifacts
+- avoid parallel preprocessing or training paths that bypass the documented workflow
 - preserve the separation between building and ground-motion preprocessing unless there is a clear reason to change it
 
 ## Documentation expectations

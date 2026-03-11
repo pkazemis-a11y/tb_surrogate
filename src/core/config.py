@@ -1,7 +1,7 @@
-"""Configuration and constants for the tall building surrogate model.
+"""Configuration and constants for the diagrid surrogate code sample.
 
-Centralizes feature definitions (10 building + 12 ground motion), all 100 response
-variables, and hyperparameters for the MIMO neural network and optimization.
+Centralizes feature definitions, the 100-response target contract, reference
+surrogate-model hyperparameters, and reusable optimization defaults.
 """
 
 from dataclasses import dataclass, field
@@ -165,12 +165,12 @@ RESPONSE_GROUPS: List[Tuple[int, int]] = [
 
 
 # ============================================================================
-# NEURAL NETWORK ARCHITECTURE
+# REFERENCE MODELING CONFIGURATION
 # ============================================================================
 
 @dataclass
 class NeuralNetworkConfig:
-    """Configuration for MIMO-FNN neural network architecture."""
+    """Configuration for the reference MIMO feed-forward surrogate model."""
     
     # Input branch sizes
     building_input_size: int = len(BUILDING_FEATURES)
@@ -236,16 +236,7 @@ class NSGAIIConfig:
 class DataPaths:
     """Centralized data path definitions for the project."""
     
-    # Input data
     DATABASE_CSV: str = 'data/database.csv'
-    
-    # Model outputs
-    TRAINED_MODEL_PATH: str = 'models/mimo_fnn_model.pth'
-    BUILDING_PREPROCESSOR_PATH: str = 'models/building_feature_preprocessor.pkl'
-    GM_PREPROCESSOR_PATH: str = 'models/gm_feature_preprocessor.pkl'
-    RESPONSE_SCALER_PATH: str = 'models/response_scaler.pkl'
-    
-    # Optimization outputs
     OPTIMIZED_SOLUTIONS_PATH: str = 'results/optimized_solutions.csv'
     TRAINING_HISTORY_PATH: str = 'results/training_history.csv'
     PERFORMANCE_METRICS_PATH: str = 'results/performance_metrics.json'

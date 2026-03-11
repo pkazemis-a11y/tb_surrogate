@@ -3,6 +3,9 @@
 ## Supported Setup
 
 This project is configured for Poetry and currently targets Python 3.8 to 3.11.
+The public repository includes the cleaned surrogate-model code, preprocessing
+helpers, and optimization utilities. Trained weights are intentionally not
+bundled here.
 
 ```bash
 poetry install
@@ -30,8 +33,6 @@ poetry run pytest
 ## Useful Commands
 
 ```bash
-poetry run train-model --help
-poetry run optimize-designs --help
 poetry run black src scripts examples tests
 poetry run isort src scripts examples tests
 poetry run mypy src
@@ -50,11 +51,12 @@ Make sure VS Code is using the Poetry environment created for this workspace.
 
 ### CLI commands are not found
 
-Use the explicit form:
+This public snapshot focuses on Python modules and examples rather than
+installable training or inference CLIs. Use the Python examples instead:
 
 ```bash
-poetry run python scripts/train_model.py --help
-poetry run python scripts/optimize_designs.py --help
+poetry run python examples/load_data.py
+poetry run python examples/complete_pipeline.py
 ```
 
 ### Tests fail because dependencies are missing

@@ -2,7 +2,13 @@
 
 ## Overview
 
-A multi-input multi-output (MIMO) neural network learns to predict 100 structural and economic response variables from 22 building design and ground-motion inputs.
+The underlying research workflow uses a multi-input multi-output surrogate to
+predict 100 structural and economic response variables from 22 building design
+and ground-motion inputs.
+
+This public repository includes a cleaned reference implementation of that
+workflow while keeping the focus on readable source code rather than distributing
+trained artifacts.
 
 **Model inputs:**
 - 10 building design parameters (geometry, proportions, vertical distribution)
@@ -13,7 +19,8 @@ A multi-input multi-output (MIMO) neural network learns to predict 100 structura
 
 ## Architecture
 
-The network uses separate input branches that merge into shared hidden layers:
+The manuscript workflow used separate input branches that merge into shared
+hidden layers:
 
 ```
 Building (10) ─┐
@@ -28,7 +35,8 @@ GM (12) ──────┘
 
 ## Training: All 100 Responses
 
-The model is trained with k-fold cross-validation to minimize MSE across all 100 outputs simultaneously. Each fold:
+In the manuscript workflow, the model is trained with k-fold cross-validation to
+minimize MSE across all 100 outputs simultaneously. Each fold:
 
 1. Fits preprocessing independently on training data only (prevents leakage)
 2. Resets model weights (prevents carryover learning between folds)
@@ -38,7 +46,9 @@ This produces a fully-conditioned surrogate that can predict any subset of respo
 
 ## Optimization: Selected Objectives
 
-The network produces one scalar output per response variable, for 100 outputs in total. Optimization defaults to a smaller subset of responses that are useful for early-stage design tradeoff studies:
+The response contract contains 100 outputs in total. Optimization often focuses
+on a smaller subset of responses that are useful for early-stage design tradeoff
+studies:
 
 - `Overall_Max_Acc`
 - `Max_Displacement`
@@ -51,7 +61,8 @@ The network produces one scalar output per response variable, for 100 outputs in
 
 ## Training Method
 
-Cross-validation is the primary validation path.
+Cross-validation is the primary validation path in the included reference
+trainer.
 
 For each fold:
 
@@ -67,7 +78,7 @@ This design avoids two common ML portfolio mistakes:
 - preprocessing leakage from validation data into training statistics
 - carrying learned weights from one fold into the next
 
-After cross-validation, a final model is trained on the full preprocessed dataset and saved for deployment.
+After cross-validation, users can train a final model on the full preprocessed dataset and save it using their own deployment conventions.
 
 ## Preprocessing
 
@@ -86,21 +97,16 @@ The code maintains separate preprocessors for building and GM inputs because the
 
 ## Multi-Objective Optimization
 
-NSGA-II searches the building-design feature space using the trained surrogate.
+NSGA-II searches the building-design feature space using a user-supplied predictor.
 
 **Defaults:** Optimizes 8 structural and economic responses:
 - Structural demands: acceleration, displacement, drift, stress, torsion, moments
 - Economic: cost per floor area
 
-**Flexibility:** Users can specify any subset of the 100 predicted responses via `--objectives`:
-
-```bash
-poetry run optimize-designs \
-  --objectives Overall_Max_Acc Max_Displacement "Total costs/TGA"
-```
+**Flexibility:** Users can specify any subset of the 100 predicted responses once
+their predictor returns the full response vector.
 
 **Implementation:**
 - Design bounds inferred from observed feature ranges
 - Objectives validated against all 100 available responses
-- Optimization uses persisted preprocessors and scaler from training
-- Ground-motion template fixed during search (mean profile or observed record)
+- Optimization is kept separate from any project-specific model implementation
