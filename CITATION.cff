@@ -1,0 +1,54 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "Surrogate-based generative optimisation of diagrid tall buildings"
+version: "0.1.0"
+date-released: 2026-03-11
+license: MIT
+abstract: "Software accompanying the manuscript 'Surrogate-based generative optimisation of diagrid tall buildings'. The repository contains a multi-input, multi-output feed-forward neural network surrogate and an NSGA-II based optimisation workflow for early-stage exploration of diagrid tall buildings under seismic loading."
+authors:
+  - family-names: Kazemi
+    given-names: Pooyan
+    email: seyedpooyan.kazemi@polimi.it
+    affiliation: "Department of Civil and Environmental Engineering, Politecnico di Milano"
+  - family-names: Turrin
+    given-names: Michela
+    affiliation: "Architectural Engineering and Technology Department, Delft University of Technology"
+  - family-names: Andriotis
+    given-names: Charalampos
+    affiliation: "Architectural Engineering and Technology Department, Delft University of Technology"
+  - family-names: Entezami
+    given-names: Alireza
+    email: alireza.entezami@polimi.it
+    affiliation: "Department of Civil and Environmental Engineering, Politecnico di Milano"
+  - family-names: Mariani
+    given-names: Stefano
+    affiliation: "Department of Civil and Environmental Engineering, Politecnico di Milano"
+  - family-names: Ghisi
+    given-names: Aldo
+    affiliation: "Department of Civil and Environmental Engineering, Politecnico di Milano"
+keywords:
+  - "surrogate modelling"
+  - "generative optimisation"
+  - "diagrid tall buildings"
+  - "multi-objective optimisation"
+  - "neural networks"
+  - "structural design"
+repository-code: "https://github.com/pkazemis-a11y/surrogate-based-generative-optimisation-of-diagrid-tall-buildings"
+preferred-citation:
+  type: article
+  title: "Surrogate-based generative optimisation of diagrid tall buildings"
+  authors:
+    - family-names: Kazemi
+      given-names: Pooyan
+    - family-names: Turrin
+      given-names: Michela
+    - family-names: Andriotis
+      given-names: Charalampos
+    - family-names: Entezami
+      given-names: Alireza
+    - family-names: Mariani
+      given-names: Stefano
+    - family-names: Ghisi
+      given-names: Aldo
+  note: "Manuscript under review."
