@@ -1,53 +1,137 @@
 # Surrogate-based Generative Optimisation of Diagrid Tall Buildings
 
+[![DOI](https://img.shields.io/badge/DOI-10.XXXX%2Fjournal.XXXX-blue)]()
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Python 3.8-3.13](https://img.shields.io/badge/Python-3.8--3.13-blue.svg)](https://www.python.org/)
+[![Surrogate](https://img.shields.io/badge/Surrogate-MIMO--FNN-red)]()
+[![Optimisation](https://img.shields.io/badge/Optimisation-NSGA--II-orange)]()
 
-This repository presents a clean machine-learning pipeline for surrogate-based design exploration of tall buildings with outer diagrids. The focus is straightforward: import the data, preprocess it carefully, train a predictor, validate it properly, and only then use it for multi-objective optimization.
+This repository implements a data-driven framework that integrates generative parametric modelling, high-fidelity finite element simulation and deep learning to enable rapid and accurate performance assessment of diagrid tall buildings under seismic loading. A dataset of 1,000 parametric building models — each analysed under seven ground motion records from the NGA-West2 database — was generated through automated architectural modelling in Grasshopper and structural simulation in OpenSeesPy, resulting in 7,000 labelled samples. A multi-input, multi-output feed-forward neural network (MIMO-FNN) serves as a surrogate model, predicting 91 response variables spanning structural demands, geometric properties, cost and embodied carbon. The trained surrogate is embedded in an NSGA-II multi-objective optimisation loop, generating Pareto-optimal building configurations that improve inter-story drift, material efficiency and environmental impact compared to baseline designs. The full methodology is described in the companion paper submitted to *Computer-Aided Civil and Infrastructure Engineering* (CACAIE).
 
-The repository includes working code for that pipeline, but it intentionally does not ship trained weights or frozen preprocessing artifacts. Anyone using the repo is expected to run those stages for themselves and adapt them to their own design questions.
+## Companion Repository
 
-## Related Repository
+The dataset generation, documentation and interactive visualisations are maintained separately:
 
-The companion dataset repository is [tb_database](https://github.com/pkazemis-a11y/tb_database). It contains the database, dataset-oriented documentation, and supporting reference material used to build the surrogate model in this repository.
+| Repository | Content |
+|---|---|
+| **[tb_database](https://github.com/pkazemis-a11y/tb_database)** | 7,000-row parametric database, variable descriptions, interactive HTML plots |
+| **tb_surrogate** (this repo) | Surrogate model, training pipeline, NSGA-II optimisation code |
 
-## What This Repository Provides
+## Workflow Overview
 
-1. **A clear learning contract** built around 22 inputs and 91 response variables.
-2. **A reproducible data pipeline** for loading, checking, and preparing the dataset.
-3. **A full training sequence** with preprocessing, validation, and performance tracking.
-4. **A downstream optimization stage** that depends on a trained predictor rather than bypassing it.
-5. **Documentation that explains the workflow as a pipeline**, not as a collection of disconnected scripts.
+The proposed framework consists of four stages, as described in the paper:
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  1. DATA           2. PREPROCESSING     3. SURROGATE        4. NSGA-II │
+│                                                                         │
+│  1000 buildings    StandardScaler       MIMO-FNN             Multi-     │
+│  × 7 ground       (inputs)             2-branch             objective  │
+│  motions           MaxAbsScaler        pyramidal             Pareto     │
+│  = 7000 samples    (responses)          architecture          front     │
+│                    LabelEncoder                                         │
+│  10 building       (categorical)       512→256→128→91                   │
+│  + 12 GM features                      outputs                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+1. **Data loading** — Import the 7,000-sample simulation database (1,000 buildings × 7 earthquakes) and validate the 22-input / 91-output contract.
+2. **Preprocessing** — Standardise building and ground-motion inputs separately; scale responses with MaxAbsScaler; handle categorical and conditional features (X6–X10 masking).
+3. **Surrogate training** — Train a pyramidal MIMO-FNN with k-fold cross-validation, fold-local preprocessing and monitored loss convergence.
+4. **Generative optimisation** — Embed the trained surrogate in NSGA-II to explore the design space and generate Pareto-optimal building configurations beyond the original dataset.
+
+## Model Architecture
+
+The MIMO-FNN follows a pyramidal topology selected after comparing hourglass, bottleneck, residual and wide-layer alternatives (see paper, Section 4):
+
+```
+Building features (10) ──→ Dense(512) + ReLU ─┐
+                                               ├─→ Concat(1024)
+GM features (12) ─────────→ Dense(512) + ReLU ─┘
+                                  │
+                           Dense(512) + ReLU + Dropout(0.3)
+                                  │
+                           Dense(256) + ReLU + Dropout(0.3)
+                                  │
+                           Dense(128) + ReLU + Dropout(0.2)
+                                  │
+                           91 response outputs
+```
+
+**Inputs (22 features):**
+
+| Group | Count | Examples |
+|---|---|---|
+| Building design parameters (X1–X10) | 10 | plan geometry, number of stories, floor height, tapering, twisting angle, curvilinearity |
+| Ground motion descriptors | 12 | magnitude, mechanism, Rjb, Rrup, Vs30, Arias intensity, duration |
+
+**Outputs (91 responses):**
+
+| Category | Count | Examples |
+|---|---|---|
+| Structural demands | 69 | acceleration, displacement, inter-story drift, von Mises stress, torsion, base reactions |
+| Geometry-dependent | 8 | total gross area, aspect ratio, façade area, diagrid angles, total mass |
+| Cost | 2 | total cost, cost per gross floor area |
+| Embodied carbon | 12 | EC for three steel types × two floor types, EC per GIA |
+
+**Hyperparameters (Table 5 in paper):**
+
+| Parameter | Value |
+|---|---|
+| Hidden layers | 512 → 256 → 128 |
+| Activation | ReLU |
+| Dropout | 0.3, 0.3, 0.2 |
+| Batch size | 32 |
+| Learning rate | 2 × 10⁻⁵ |
+| Weight decay (L2) | 1 × 10⁻⁴ |
+| Epochs | 100 |
+| Optimiser | Adam |
+| CV folds | 2 |
+
+## Optimisation
+
+NSGA-II searches the 10-dimensional building design space using the trained surrogate as a fast evaluator. Default objectives target eight structural and mass responses:
+
+1. **Overall_Max_Acc** — peak floor acceleration
+2. **Max_Displacement** — maximum lateral displacement
+3. **Overall_Max_Drift** — maximum inter-story drift
+4. **Total_Max_Von_Mises_tot** — peak equivalent stress
+5. **Overall_Max_Torsion** — maximum torsional response
+6. **Total_Max_Magnitude_R** — peak reaction resultant
+7. **Total_Max_Magnitude_M** — peak moment resultant
+8. **TotalMass** — total structural mass
+
+Users can specify any subset of the 91 predicted responses as objectives for their own design criteria (e.g. cost, embodied carbon).
 
 ## Repository Structure
 
 ```
-data/                 # training dataset
-docs/                 # workflow explanation and technical notes
-examples/             # runnable pipeline examples
-src/                  # implementation of the workflow
-tests/                # smoke tests
+tb_surrogate/
+├── data/
+│   └── database.csv              # 7,000-row simulation database
+├── src/
+│   ├── core/
+│   │   ├── config.py             # Feature/response definitions, hyperparameters
+│   │   └── data.py               # DataLoader and preprocessing utilities
+│   ├── models/
+│   │   ├── network.py            # MIMO-FNN architecture (PyTorch)
+│   │   └── trainer.py            # Cross-validation, training, prediction
+│   ├── optimization/
+│   │   └── nsga2.py              # NSGA-II problem definition and optimizer
+│   └── visualization.py          # Training curve and metric plots
+├── examples/
+│   ├── load_data.py              # Quick data inspection
+│   └── complete_pipeline.py      # Full 6-step pipeline
+├── tests/
+│   └── test_smoke.py             # Contract and shape verification
+├── docs/
+│   ├── DATASET.md                # Data pipeline and response contract
+│   ├── METHODOLOGY.md            # Surrogate and optimisation methodology
+│   ├── HYPERPARAMETERS.md        # Hyperparameter justification
+│   └── FAQ.md                    # Common questions
+├── pyproject.toml                # Poetry project and dependencies
+├── CITATION.cff                  # Citation metadata
+└── README.md
 ```
-
-## How It Works
-
-This repository is structured as a strict pipeline:
-
-1. **Import data** and verify the expected feature and response columns.
-2. **Preprocess data** by keeping building and ground-motion inputs separate, standardizing the inputs, and scaling the responses for stable optimization during training.
-3. **Train and validate** the surrogate with fold-local preprocessing, monitored loss curves, and holdout checks.
-4. **Re-fit on the full dataset** once the training configuration has been validated.
-5. **Run optimization** only after the surrogate can produce reliable response predictions.
-
-If preprocessing is skipped, training is not meaningful. If training is skipped, optimization is not meaningful. The workflow is intentionally sequential.
-
-**Inputs to model:**
-- 10 building features (geometry, proportions, structural parameters)
-- 12 ground-motion parameters (seismic characteristics)
-
-**Outputs (91 responses):** accelerations, displacements, stresses, torsion, geometry-derived quantities, total costs, and embodied carbon.
-
-**Default optimization targets (8):** peak acceleration, maximum displacement, story drift, equivalent stress, torsion, reaction resultants, and total structural mass.
 
 ## Installation
 
@@ -57,78 +141,29 @@ Requires Python 3.8–3.13. Uses Poetry for dependency management.
 poetry install
 ```
 
-Run commands without activating a shell:
+## Quick Start
 
 ```bash
+# Verify the environment and data contract
 poetry run python examples/load_data.py
-```
 
-Or activate the environment first:
-
-```bash
-poetry shell
-```
-
-More setup detail is in [SETUP.md](SETUP.md).
-
-## Public Scope
-
-This repository includes:
-
-- the 10 building-feature inputs
-- the 12 ground-motion inputs
-- the 91-response output contract used in the archived notebook workflow
-- a complete preprocessing, training, validation, and optimization workflow
-- loss tracking and visual diagnostics for training quality
-- multi-objective optimization utilities for design exploration
-
-This repository does not include:
-
-- trained model weights
-- serialized preprocessing artifacts
-- installable training or inference CLIs
-
-## Training Example
-
-Run the clean end-to-end example:
-
-```bash
+# Run the full pipeline: data → CV → training → validation → NSGA-II
 poetry run python examples/complete_pipeline.py
+
+# Run smoke tests
+poetry run pytest tests/
 ```
 
-The example walks through the full sequence of preprocessing, training, validation, and optimization without writing model files.
+## Citation
 
-## Optimization
+If you use this code, please cite:
 
-Optimization is treated as the final stage of the workflow, not as a standalone entry point. Candidate designs are evaluated only after the response-prediction stage is in place.
-
-## Workflow Design Notes
-
-- building and ground-motion inputs stay separate because they describe different physical processes
-- response scaling stays explicit so training remains stable across many output targets
-- cross-validation comes before final fitting so the workflow is not tuned to one lucky split
-- optimization sits downstream of prediction, so it is treated as the last step rather than the starting point
-
-## Quick Verification
-
-```bash
-poetry run pytest
-poetry run python examples/load_data.py
-poetry run python examples/complete_pipeline.py
 ```
-
-## Documentation Map
-
-- [GETTING_STARTED.md](GETTING_STARTED.md): end-to-end usage
-- [SETUP.md](SETUP.md): environment setup
-- [docs/METHODOLOGY.md](docs/METHODOLOGY.md): modeling decisions
-- [docs/DATASET.md](docs/DATASET.md): raw data vs training contract
-- [docs/FAQ.md](docs/FAQ.md): implementation questions
-
-## Manuscript Context
-
-The associated manuscript is currently under review. Until the paper is formally published, please cite this repository as software and reference the manuscript title in related project material when needed.
+Kazemi P., Turrin M., Andriotis C., Entezami A., Mariani S., Ghisi A. (2025),
+"Surrogate-based generative optimisation of diagrid tall buildings",
+Computer-Aided Civil and Infrastructure Engineering.
+```
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+This project is licensed under the MIT License — see [LICENSE](LICENSE) for details.
